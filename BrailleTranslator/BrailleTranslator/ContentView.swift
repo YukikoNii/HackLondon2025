@@ -10,7 +10,6 @@ import UIKit
 import Foundation
 import AVFoundation
 
-
 struct ContentView: View {
     @State private var selectedTab = 1
     
@@ -21,8 +20,34 @@ struct ContentView: View {
                     .tag(1)
                 ObstacleView()
                     .tag(2)
-            }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never)) // Hides the default page indicator
+
+                ZStack {
+                    CameraView()
+                        .edgesIgnoringSafeArea(.all)
+                    
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                print("Button tapped!")
+                                // capturePhoto()
+                            }) {
+                                Image(systemName: "circle.fill")
+                                    .resizable()
+                                    .frame(width: 70, height: 70)
+                                    .foregroundColor(.white)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                            }
+                            .padding(.bottom, 50)
+                            Spacer()
+                        }
+                    }
+                        }
+                        .tag(3) // Added .tag(3) to make it properly part of the TabView
+                    }
+                    .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never)) // Hides the default page indicator
             
             Spacer()
             
@@ -50,6 +75,19 @@ struct ContentView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
+
+                Button(action: { self.selectedTab = 3 }) {
+                    VStack {
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(self.selectedTab == 3 ? .blue : .gray)
+                        Text("Obstacle")
+                            .font(.footnote)
+                            .foregroundColor(self.selectedTab == 3 ? .blue : .gray)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
             
             }
             .padding()
@@ -58,6 +96,74 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.gray.opacity(0.1))
+    }
+
+    // Convert UIImage to Base64 and analyze
+    func processCapturedImage(_ image: UIImage) {
+        print("Image captured. Converting to Base64...")
+
+        if let imageData = image.jpegData(compressionQuality: 0.8) {
+            let base64String = imageData.base64EncodedString()
+            Task {
+                await analyseImage(base64Image: base64String)
+            }
+        } else {
+            print("Failed to convert image to Base64.")
+        }
+    }
+
+    // Function to analyze captured image
+
+    func analyseImage(base64Image: String) async {
+        print("Image captured and sent to analysis function")
+        
+        let openAIURL = URL(string: "https://api.openai.com/v1/chat/completions")!
+        var request = URLRequest(url: openAIURL)
+        request.httpMethod = "POST"
+        request.addValue("Bearer YOUR_OPENAI_API_KEY", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // let json: [String: Any] = [
+        //     "model": "gpt-4-vision-preview",  // Correct model name
+        //     "messages": [
+        //         ["role": "system", "content": "You are a helpful assistant which guides visually impaired people navigate their surroundings."],
+        //         [
+        //             "role": "user",
+        //             "content": [
+        //                 ["type": "text", "text": "Analyze the image and describe the surroundings with guidance on safe movement directions."],
+        //                 ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(base64Image)"]]
+        //             ]
+        //         ]
+        //     ],
+        //     "max_tokens": 500
+        // ]
+        
+        // do {
+        //     let jsonData = try JSONSerialization.data(withJSONObject: json, options: [])
+        //     request.httpBody = jsonData
+            
+        //     let (data, _) = try await URLSession.shared.data(for: request)
+            
+            // if let responseJSON = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            // let choices = responseJSON["choices"] as? [[String: Any]],
+            // let textResponse = choices.first?["message"] as? [String: Any],
+            // let content = textResponse["content"] as? String {
+                
+            //     await MainActor.run {
+            //         self.speak(text: content) // Ensure speak() is async-compatible
+            //     }
+            // }
+        // } catch {
+        //     print("Error analyzing image: \(error)")
+        // }
+    }
+
+    
+    func speak(text: String) {
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        let synthesizer = AVSpeechSynthesizer()
+        synthesizer.speak(utterance)
     }
 }
 
@@ -137,7 +243,7 @@ struct BrailleView: View {
     
     // Function to send image to Flask server
     func sendImageToServer(_ image: UIImage) {
-        guard let url = URL(string: "link here") else { return }
+        guard let url = URL(string: "http://127.0.0.1:5000/text_to_audio") else { return }
         
         // Convert UIImage to JPEG data
         guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }

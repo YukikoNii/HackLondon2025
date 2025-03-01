@@ -1,9 +1,10 @@
 import cv2
-import torch
 import numpy as np
 import pyttsx3
 from openai import OpenAI
 import base64
+import threading
+import time
 
 client = OpenAI()
 
@@ -18,10 +19,10 @@ def frame_to_base64(frame):
     return jpg_as_text
 
 def analyse_image(base64_image):
-    return client.chat.completions.create(
+    response = client.chat.completions.create(
         model="o1",
         messages=[
-            {"role": "developer", "content": "You are a helpful assistant which guides visually impaired people navigate their surroundings.."},
+            {"role": "developer", "content": "You are a helpful assistant which guides visually impaired people navigate their surroundings."},
             {
                 "role": "user",
                 "content": [
@@ -41,63 +42,48 @@ def analyse_image(base64_image):
             }
         ],
     )
+    return response.choices[0].message.content
 
-# Load YOLO model
-# model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+def process_frame(frame):
+    global processing
+    processing = True  # Set processing flag to prevent multiple triggers
+
+    frame_base64 = frame_to_base64(frame)
+    text = analyse_image(frame_base64)
+    print(text)
+    speak(text)
+
+    processing = False  # Reset processing flag after completion
 
 # Open webcam
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FPS, 30)  # Set frame rate
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffering
 
-detect_objects = False  # Detection is off initially
+processing = False  # Flag to prevent multiple processing triggers
+spinner_frames = ['|', '/', '-', '\\']  # Frames for the spinner animation
+spinner_index = 0
 
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         break
+
+    # Display processing status
+    if processing:
+        spinner_index = (spinner_index + 1) % len(spinner_frames)
+        cv2.putText(frame, f"Processing {spinner_frames[spinner_index]}", 
+                    (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
     
-    # Show the video feed without detection
+    # Show the video feed
     cv2.imshow('Blind Navigation', frame)
 
     key = cv2.waitKey(1) & 0xFF
-    if key == ord('d'):  # Press 'd' to trigger detection
-        detect_objects = True
+    if key == ord('d') and not processing:  # Press 'd' to trigger detection if not already processing
+        threading.Thread(target=process_frame, args=(frame,), daemon=True).start()
+
     elif key == ord('q'):  # Press 'q' to quit
         break
 
-    if detect_objects:
-        detect_objects = False  # Reset detection flag
-
-        # results = model(frame)
-        detected_labels = []
-
-        # for obj in results.xyxy[0]:
-        #     x1, y1, x2, y2, conf, cls = obj.tolist()
-        #     label = model.names[int(cls)]
-        #     if conf > 0.5:
-        #         detected_labels.append(label)
-
-        # cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-        # cv2.putText(frame, f"{label}", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        # Convert frame to base64
-        cv2.imwrite('uploads/frame.jpg', frame)
-        frame_base64 = frame_to_base64(frame)
-
-        # Pass the base64 image to the function
-        response = analyse_image(frame_base64)
-        print(response.choices)
-        text = response.choices[0].message.content
-        print(text)
-        speak(text)
-
-
-        if detected_labels:
-            speak("Objects detected: " + ", ".join(detected_labels))
-        else:
-            speak("No objects found.")
-
 cap.release()
 cv2.destroyAllWindows()
-
