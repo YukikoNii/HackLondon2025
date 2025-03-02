@@ -89,45 +89,36 @@ struct ContentView: View {
     func analyseImage(base64Image: String) async {
         print("Image captured and sent to analysis function")
         
-        let openAIURL = URL(string: "https://api.openai.com/v1/chat/completions")!
-        var request = URLRequest(url: openAIURL)
+        guard let url = URL(string: "http://127.0.0.1:5000/text_to_audio") else { return }
+        
+        // Convert UIImage to JPEG data
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }
+        
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.addValue("Bearer YOUR_OPENAI_API_KEY", forHTTPHeaderField: "Authorization")
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // let json: [String: Any] = [
-        //     "model": "gpt-4-vision-preview",  // Correct model name
-        //     "messages": [
-        //         ["role": "system", "content": "You are a helpful assistant which guides visually impaired people navigate their surroundings."],
-        //         [
-        //             "role": "user",
-        //             "content": [
-        //                 ["type": "text", "text": "Analyze the image and describe the surroundings with guidance on safe movement directions."],
-        //                 ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(base64Image)"]]
-        //             ]
-        //         ]
-        //     ],
-        //     "max_tokens": 500
-        // ]
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         
-        // do {
-        //     let jsonData = try JSONSerialization.data(withJSONObject: json, options: [])
-        //     request.httpBody = jsonData
-            
-        //     let (data, _) = try await URLSession.shared.data(for: request)
-            
-            // if let responseJSON = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            // let choices = responseJSON["choices"] as? [[String: Any]],
-            // let textResponse = choices.first?["message"] as? [String: Any],
-            // let content = textResponse["content"] as? String {
-                
-            //     await MainActor.run {
-            //         self.speak(text: content) // Ensure speak() is async-compatible
-            //     }
-            // }
-        // } catch {
-        //     print("Error analyzing image: \(error)")
-        // }
+        // Create the body for the request
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        request.httpBody = body
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("Error sending image: \(error)")
+                return
+            }
+            print("Image sent successfully")
+        }
+        task.resume()
     }
 
     

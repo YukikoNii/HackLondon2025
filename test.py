@@ -1,63 +1,59 @@
+import os
 from ultralytics import YOLO
 import cv2
+import numpy as np
 
 # Load trained model
 model = YOLO("runs/detect/train4/weights/best.pt")
 
-# Load Braille dictionary
-braille_dict = {
-    "100000": "A", "101000": "B", "110000": "C", "110100": "D",
-    "100100": "E", "111000": "F", "111100": "G", "101100": "H",
-    "011000": "I", "011100": "J", "100010": "K", "101010": "L",
-    "110010": "M", "110110": "N", "100110": "O", "111010": "P",
-    "111110": "Q", "101110": "R", "011010": "S", "011110": "T",
-    "100011": "U", "101011": "V", "011101": "W", "110011": "X",
-    "110111": "Y", "100111": "Z"
-}
-
 # Load image
-image_path = "data/img.webp"
+image_path = "data/2734_jpg.rf.94d9dd5a3d4a9d6590190de96c08a5e3.jpg"
+file_name = os.path.basename(image_path)
+
 image = cv2.imread(image_path)
 
 # Run YOLO inference
 results = model(image_path)
 
-# Store detected Braille dots
-detected_cells = []
+# Load class names from the model
+class_names = model.names  # Dictionary mapping class indices to names
 
-# Process detected bounding boxes
+detections = []
+
 for result in results:
-    for box in result.boxes.xyxy:
-        x1, y1, x2, y2 = map(int, box)
-        
-        # Find center of bounding box
-        center_x = (x1 + x2) // 2
-        center_y = (y1 + y2) // 2
-        
-        # Store detected Braille dot
-        detected_cells.append((center_x, center_y))
+    for box in result.boxes:
+        class_id = int(box.cls)  # Get class ID
+        label = class_names[class_id]  # Get class name
+        confidence = box.conf.item()  # Confidence score
+        x_min = box.xyxy[0][0].item()  # Left X coordinate
+        y_min = box.xyxy[0][1].item()  # Top Y coordinate
 
-        # Draw bounding box
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        detections.append((x_min, y_min, label, confidence))
+    result.save(filename=f'braille/{file_name}')
+    result.show()
 
-# Sort dots top-to-bottom, left-to-right
-detected_cells.sort(key=lambda p: (p[1], p[0]))
+# Convert detections to NumPy array for sorting
+detections = np.array(detections, dtype=object)
 
-# Convert detected dots into Braille binary patterns
-braille_binary = []
-for i in range(0, len(detected_cells), 6):
-    cell = ['0'] * 6  
-    for j, (x, y) in enumerate(detected_cells[i:i+6]):
-        cell[j] = '1'  
-    braille_binary.append("".join(cell))
+# Sort by Y-coordinate first
+detections = detections[detections[:, 1].argsort()]
 
-# Convert Braille binary to text
-translated_text = "".join([braille_dict.get(cell, "?") for cell in braille_binary])
+# Group by rows using a Y threshold (to cluster letters in the same row)
+y_threshold = 20  # Adjust if needed
+rows = []
+current_row = [detections[0]]
 
-# Display translated Braille text
-print("Translated Braille:", translated_text)
+for i in range(1, len(detections)):
+    if abs(detections[i, 1] - current_row[-1][1]) < y_threshold:
+        current_row.append(detections[i])
+    else:
+        rows.append(sorted(current_row, key=lambda x: x[0]))  # Sort row by X-coordinates
+        current_row = [detections[i]]
 
-# Show image with detections
-cv2.imshow("Detected Braille", image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+# Append last row
+if current_row:
+    rows.append(sorted(current_row, key=lambda x: x[0]))
+
+# Flatten sorted rows into the final ordered text
+ordered_text = "".join([char[2] for row in rows for char in row])
+print("Detected Text:", ordered_text)

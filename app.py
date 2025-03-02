@@ -1,5 +1,6 @@
-from flask import Flask, jsonify, request
-from werkzeug.utils import secure_filename
+from io import BytesIO
+from tkinter import Image
+from flask import Flask, jsonify, request, send_file
 import os
 from gtts import gTTS
 import asyncio
@@ -24,14 +25,6 @@ async def translate_text(text, target_language):
         return translated.text
     except Exception as e:
         return str(e)
-
-def save_image(file):
-    if file.filename == '':
-        return {"error": "No selected file"}, 400
-    
-    filename = secure_filename(file.filename)
-    file.save(os.path.join('uploads', filename))
-    return {"message": "Image uploaded successfully", "filename": filename}, 200
 
 def generate_audio(text, target_language):
     try:
@@ -62,17 +55,6 @@ def generate_audio(text, target_language):
 
 app = Flask(__name__)
 
-@app.route('/upload_image', methods=['POST'])
-def upload_image():
-    try:
-        if 'image' not in request.files:
-            return jsonify({"error": "No image file provided"}), 400
-        
-        file = request.files['image']
-        return jsonify(*save_image(file))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/read_braille', methods=['POST'])
 def read_braille():
     try:
@@ -80,66 +62,25 @@ def read_braille():
             return jsonify({"error": "No image file provided"}), 400
         
         file = request.files['image']
-        
-        # Save the image to a temporary location
         temp_image_path = "/tmp/" + file.filename
         file.save(temp_image_path)
 
-        client = genai.Client(api_key="AIzaSyAna9p5EPBQ-ArE6J-ac_XJasN0o20adf0")
-        
-        # Get the detected Braille text from inference.py using the saved image path
         detected_text = get_detected_text(temp_image_path)
         
-        if not detected_text:
-            print("No Braille text detected.")
-            return
-        
-        # Construct a prompt for Google Gemini.
-        prompt = f"""I have detected the following Braille pattern from an image:
-
-        {detected_text}
-
-        If "C CC" is detected, then output "You can do it" in this exact form. 
-        Otherwise, if alphabet is detected, output "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z"
-        DO NOT output any other word or punctuation. 
-        """
-
-        # Query Google Gemini.
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
-        )
-
-        return jsonify({"response": response.text})
+        return jsonify({"response": detected_text}) if detected_text else jsonify({"error": "No text detected"}), 500
     except Exception as e:
-        print("hello2")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/text_to_audio', methods=['POST'])
-def text_to_audio():
+@app.route('/get_image/<path:img_path>', methods=['GET'])
+def get_image(img_path):
     try:
-        data = request.json
-        text = data.get('text')
-        target_language = data.get('lang', 'en')
-        if not text:
-            return "No text provided", 400
-        
-        return jsonify(generate_audio(text, target_language))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # Set the base directory where images are stored
+        base_dir = "braille/"  # Change this to your actual image folder
+        image_full_path = f"{base_dir}{img_path}"
 
-# @app.route('/analyse_image', methods=['POST'])
-# def analyse_image_endpoint():
-#     try:
-#         data = request.json
-#         base64_image = data.get('image')
-#         if not base64_image:
-#             return "No image provided", 400
-        
-#         analysis_result = analyse_image(base64_image)
-#         return jsonify({"analysis": analysis_result})
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
+        return send_file(image_full_path, mimetype='image/jpeg')
+    except FileNotFoundError:
+        return {"error": "Image not found"}, 404
 
 
 @app.route('/analyse_surroundings', methods=['POST']) 
@@ -188,7 +129,22 @@ def analyse_image(base64_image):
     print(response.text)
     return response.text
 
+@app.route('/analyse_image', methods=['POST'])
+def analyse_image_endpoint():
+    try:
+        data = request.json
+        base64_image = data.get('image')
+        if not base64_image:
+            return "No image provided", 400
+        
+        analysis_result = analyse_image(base64_image)
+        return jsonify({"analysis": analysis_result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
 if __name__ == '__main__':
      app.run(host='0.0.0.0', port=5001, debug=True)
     
-# curl -X POST -F "image=@/Users/vernellgowa/Vernell/Uni/HackLondon2025/motivation.png" http://127.0.0.1:5000/upload-image
+# curl -X POST -F "image=@/Users/vernellgowa/Vernell/Uni/HackLondon2025/alphabet.png" http://127.0.0.1:5001/read_braille

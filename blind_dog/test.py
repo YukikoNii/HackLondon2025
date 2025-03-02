@@ -21,6 +21,12 @@ cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FPS, 30)  # Increase frame rate for smoother video
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffering to lower lag
 
+# Set frame size
+frame_width = 640
+frame_height = 480
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+
 # Background subtraction for motion detection
 fgbg = cv2.createBackgroundSubtractorMOG2()
 last_message = ""
@@ -30,9 +36,8 @@ while cap.isOpened():
     if not ret:
         break
     
-    frame = cv2.resize(frame, (320, 240))
+    frame = cv2.resize(frame, (frame_width, frame_height))
 
-    frame_width = frame.shape[1]
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     fgmask = fgbg.apply(gray)
     
