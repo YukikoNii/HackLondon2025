@@ -18,8 +18,9 @@ def main():
 
     {detected_text}
 
-    Assuming this pattern was meant to represent a complete sequence, output only the corrected sequence in one line. For example, if the pattern is meant to be the alphabet, output "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z". If it's a numerical sequence, output the corrected numbers in order. Do not include any additional commentary or warnings.
-    If it is not the alphabet, then it will be 'You can do it' which is what I want you to respond with
+    If "C CC" is detected, then output "You can do it" in this exact form. 
+    Otherwise, if alphabet is detected, output "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z"
+    DO NOT output any other word or punctuation. 
     """
 
     # Query Google Gemini.
